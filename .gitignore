@@ -1,0 +1,13 @@
+node_modules
+.env
+.env.local
+.env.production
+.env.development
+.next
+next-env.d.ts
+tsconfig.tsbuildinfo
+drizzle.config.json
+*.log
+.DS_Store
+.vercel
+out

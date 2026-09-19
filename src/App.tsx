@@ -18,6 +18,7 @@ import IbuHamil from './pages/IbuHamil';
 import Imunisasi from './pages/Imunisasi';
 import Peta from './pages/Peta';
 import Laporan from './pages/Laporan';
+import TrakteerWidget from './components/TrakteerWidget';
 
 const queryClient = new QueryClient({
   defaultOptions: { queries: { staleTime: 30_000, retry: 1, refetchOnWindowFocus: false } },
@@ -90,7 +91,7 @@ function Router({ route }: { route: Route }) {
 }
 
 export default function App() {
-  const { loading } = useAuth();
+  const { loading, user } = useAuth();
   const route = useHashRoute();
 
   useEffect(() => { void initAuth(); }, []);
@@ -99,6 +100,7 @@ export default function App() {
     <QueryClientProvider client={queryClient}>
       <ToastProvider>
         {loading ? <Splash /> : <Router route={route} />}
+        {user && <TrakteerWidget />}
       </ToastProvider>
     </QueryClientProvider>
   );
