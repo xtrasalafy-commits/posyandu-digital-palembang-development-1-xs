@@ -83,6 +83,62 @@ Tanpa `VITE_SUPABASE_URL` & `VITE_SUPABASE_ANON_KEY`, aplikasi otomatis berjalan
 | Bidan | `bidan@posyandu.id` | `bidan123` |
 | Admin | `admin@dinkes.id` | `admin123` |
 
+> ⚠️ **Penting:** Akun demo di atas HANYA berfungsi dalam **Mode Demo** (tanpa env Supabase).
+> Kalau aplikasi sudah terhubung ke Supabase (env `VITE_SUPABASE_URL` terpasang), akun-akun
+> ini harus dibuat secara manual di Supabase — lihat **🔧 Setup Supabase** di bawah.
+
+---
+
+## 🔧 Setup Supabase (untuk data persisten di server)
+
+Supabase menyediakan Auth + PostgreSQL yang aman untuk aplikasi client-side ini.
+Ikuti 3 langkah berikut agar akun demo bisa dipakai di produksi.
+
+### Langkah 1 — Buat Project Supabase
+1. Daftar / login di [supabase.com](https://supabase.com) (gratis)
+2. **New Project** → isi nama, password DB, region (pilih `Singapore` untuk Indonesia)
+3. Tunggu provisioning selesai (±2 menit)
+
+### Langkah 2 — Buat 4 Akun Demo
+1. Buka **Dashboard → Authentication → Users**
+2. Klik **Add user → Create new user**
+3. Buat keempat akun ini (aktifkan "Auto Confirm User"):
+
+   | Email | Password |
+   |-------|----------|
+   | `kader@posyandu.id` | `kader123` |
+   | `kader2@posyandu.id` | `kader123` |
+   | `bidan@posyandu.id` | `bidan123` |
+   | `admin@dinkes.id` | `admin123` |
+
+### Langkah 3 — Jalankan SQL Schema
+1. Buka **Dashboard → SQL Editor → New query**
+2. Copy-paste seluruh isi file [`supabase/schema.sql`](supabase/schema.sql)
+3. Klik **Run** (butuh ±5 detik)
+
+Script ini akan otomatis:
+- Membuat 5 tabel: `profiles`, `bayi`, `antropometri_logs`, `imunisasi`, `ibu_hamil`
+- Mengaktifkan **Row Level Security** + policy (hanya user login yang bisa akses data)
+- Menghubungkan setiap akun demo (berdasarkan email) ke baris `profiles` dengan role masing-masing
+- Menambahkan beberapa data contoh (3 balita, log antropometri, imunisasi, 1 ibu hamil)
+
+Verifikasi dengan query cek di akhir file SQL:
+```sql
+SELECT email, role FROM auth.users u JOIN public.profiles p ON p.id = u.id;
+```
+
+### Langkah 4 — Set Environment Variables
+Di **Vercel** (Settings → Environment Variables) atau file `.env.local`:
+
+| Key | Value |
+|-----|-------|
+| `VITE_SUPABASE_URL` | `https://xxxxx.supabase.co` (Project Settings → API → Project URL) |
+| `VITE_SUPABASE_ANON_KEY` | `eyJ...` (Project Settings → API → anon public) |
+
+> ⚠️ Jangan pakai `service_role` key — itu untuk server only.
+
+Setelah itu **Redeploy** di Vercel, lalu login pakai akun demo di atas.
+
 ---
 
 ## 📦 Build Production
@@ -121,6 +177,22 @@ Error ini berarti **deployment gagal / belum ada deployment yang sukses**, BUKAN
 1. **Build gagal di Vercel** → cek **Build Logs** di tab Deployments, atau jalankan `npm run build` lokal dulu untuk memastikan tidak ada error.
 2. **Environment Variable di `vercel.json` belum dibuat** → jangan pakai referensi `@nama-var` di `vercel.json` jika variabelnya belum ada di Settings → Environment Variables. Lebih aman: set env var langsung lewat **dashboard Vercel** saja.
 3. **Kunjungi URL project utama** (misal `nama-project.vercel.app`), bukan URL deployment spesifik (`nama-project-abc123.vercel.app`) yang gagal.
+
+### ⚠️ Troubleshooting: `Invalid login credentials` saat login demo
+
+Error ini datang langsung dari **Supabase Auth**. Artinya aplikasi **sudah** terhubung ke Supabase (env terbaca), tapi akun yang kamu coba belum terdaftar di server Supabase.
+
+**Solusi:** ikuti **🔧 Setup Supabase** di atas — khususnya:
+- **Langkah 2** (buat 4 user di Authentication → Users), dan
+- **Langkah 3** (jalankan `supabase/schema.sql` di SQL Editor) supaya setiap user punya baris `profiles` + role.
+
+Kalau setelah login berhasil layar hanya menampilkan **"Memuat data..."** tanpa henti → user tersebut belum punya baris di tabel `profiles`. Jalankan ulang Langkah 3 (scriptnya aman di-run berulang).
+
+### ⚠️ Alternatif: jalankan tanpa Supabase (Mode Demo murni)
+
+Kalau cuma mau mencoba aplikasi tanpa setup database apa pun:
+- **Hapus / kosongkan** env `VITE_SUPABASE_URL` & `VITE_SUPABASE_ANON_KEY` di Vercel
+- Redeploy → aplikasi otomatis masuk **Mode Demo** (data di localStorage, 4 akun demo 1-klik langsung jalan)
 
 ### 🗄️ Tentang DATABASE_URL (Neon / PostgreSQL)
 

@@ -5,9 +5,9 @@
 import { useEffect, useState } from 'react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { Baby } from 'lucide-react';
-import { initAuth, useAuth } from './lib/auth';
+import { initAuth, useAuth, logout } from './lib/auth';
 import { useProfile, ROLE_AKSES } from './lib/api';
-import { ToastProvider } from './components/ui';
+import { ToastProvider, Button } from './components/ui';
 import Layout from './components/Layout';
 import Login from './pages/Login';
 import Dashboard from './pages/Dashboard';
@@ -60,13 +60,40 @@ function Splash() {
   );
 }
 
+function ProfileNotFound() {
+  return (
+    <div className="flex min-h-dvh flex-col items-center justify-center gap-4 bg-gradient-to-br from-teal-600 to-emerald-500 p-6 text-center">
+      <div className="flex h-20 w-20 items-center justify-center rounded-3xl bg-white shadow-2xl">
+        <Baby className="h-11 w-11 text-teal-600" />
+      </div>
+      <div className="max-w-sm rounded-2xl bg-white/15 p-5 backdrop-blur">
+        <p className="text-lg font-extrabold text-white">Akun belum terdaftar</p>
+        <p className="mt-2 text-sm font-semibold text-teal-100">
+          Akun Anda berhasil login, tapi belum punya data profil di database.
+          Hubungi admin untuk mendaftarkan profil, atau jalankan script SQL
+          <code className="rounded bg-white/20 px-1.5 py-0.5 text-xs"> supabase/schema.sql </code>
+          di Supabase SQL Editor.
+        </p>
+      </div>
+      <Button
+        variant="secondary"
+        onClick={() => void logout()}
+        className="bg-white text-teal-700 hover:bg-teal-50"
+      >
+        Keluar
+      </Button>
+    </div>
+  );
+}
+
 function Router({ route }: { route: Route }) {
   const { user } = useAuth();
-  const { data: profile } = useProfile(user?.id);
+  const { data: profile, isLoading } = useProfile(user?.id);
   const role = profile?.role;
 
   if (!user) return <Login />;
-  if (!role) return <Splash />;
+  if (isLoading) return <Splash />;
+  if (!role) return <ProfileNotFound />;
 
   // Guard peran
   const akses = ROLE_AKSES[role] ?? [];
