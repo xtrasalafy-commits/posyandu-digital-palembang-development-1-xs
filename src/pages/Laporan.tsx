@@ -7,7 +7,7 @@ import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import * as XLSX from 'xlsx';
 import { Download, FileSpreadsheet, FileText, Loader2, ShieldCheck } from 'lucide-react';
-import { supabase } from '../lib/supabase';
+import { db } from '../lib/db';
 import { useAnakSemua, useStatistik } from '../lib/api';
 import { Badge, Button, Card, EmptyState, Input, useToast } from '../components/ui';
 import { fmtBulanTahun } from '../lib/utils';
@@ -36,7 +36,7 @@ export default function Laporan() {
     queryFn: async () => {
       const awal = bulan + '-01';
       const akhir = bulan + '-31';
-      const { data } = await supabase.from('antropometri_logs').select('*').gte('tanggal', awal).lte('tanggal', akhir);
+      const { data } = await db.from('antropometri_logs').select('*').gte('tanggal', awal).lte('tanggal', akhir);
       return (data ?? []) as AntropometriLog[];
     },
   });

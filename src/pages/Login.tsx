@@ -6,7 +6,7 @@ import type { FormEvent } from 'react';
 import { Baby, Eye, EyeOff, HeartHandshake, Lock, Mail, ShieldCheck, UserRound, Stethoscope } from 'lucide-react';
 import { login } from '../lib/auth';
 import { Button, Field, Input, useToast } from '../components/ui';
-import { isDemoMode, resetDemoData } from '../lib/supabase';
+import { isDemoMode, resetDemoData } from '../lib/db';
 import ilustrasiLogin from '../assets/ilustrasi-login.png';
 
 const AKUN_DEMO = [
@@ -34,7 +34,13 @@ export default function Login() {
     const { error: err } = await login(email, sandi);
     setLoading(false);
     if (err) {
-      setError(err.message || 'Gagal masuk. Coba lagi.');
+      const msg = String(err.message || 'Gagal masuk. Coba lagi.');
+      // Error khas Supabase Auth saat email/password tidak cocok ATAU user belum dibuat
+      if (/invalid login credentials/i.test(msg)) {
+        setError('Email atau kata sandi salah — ATAU akun ini belum dibuat di server Supabase. Buat user di Supabase Dashboard → Authentication → Users, atau jalankan supabase/schema.sql.');
+      } else {
+        setError(msg);
+      }
     } else {
       toast({ title: 'Selamat datang kembali! 👋', desc: 'Siap bantu cegah stunting hari ini.', variant: 'success' });
     }
@@ -153,7 +159,7 @@ export default function Login() {
             ))}
           </div>
 
-          {isDemoMode && (
+          {isDemoMode ? (
             <div className="mt-6 flex items-center justify-between rounded-2xl border border-dashed border-teal-200 bg-teal-50/60 px-4 py-3 text-xs text-teal-700">
               <span className="flex items-center gap-2 font-semibold">
                 <HeartHandshake className="h-4 w-4" /> Mode demo dengan data contoh
@@ -164,6 +170,17 @@ export default function Login() {
               >
                 Reset data
               </button>
+            </div>
+          ) : (
+            <div className="mt-6 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-xs">
+              <p className="flex items-center gap-2 font-bold text-slate-700">
+                <span className="h-2 w-2 rounded-full bg-emerald-500" />
+                Terhubung ke server database (online)
+              </p>
+              <p className="mt-1.5 leading-relaxed text-slate-500">
+                Login memakai data dari server. Akun demo sudah dibuat otomatis
+                oleh <code className="rounded bg-white px-1.5 py-0.5 text-[10px]">neon/schema.sql</code>.
+              </p>
             </div>
           )}
         </div>

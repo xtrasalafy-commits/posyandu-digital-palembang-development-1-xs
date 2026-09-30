@@ -3,7 +3,7 @@
 // Semua query & mutasi ke Supabase terpusat di sini.
 // ============================================================
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { supabase, resetDemoData } from './supabase';
+import { db, resetDemoData } from './db';
 import type { AntropometriLog, Bayi, IbuHamil, Imunisasi, Profile, Role } from './types';
 import { STATUS_META } from './utils';
 import { usiaBulanFloat } from './antropometri';
@@ -28,7 +28,7 @@ export function useProfile(userId?: string) {
     queryKey: [...qk.profile, userId],
     enabled: !!userId,
     queryFn: async (): Promise<Profile | null> => {
-      const { data } = await supabase.from('profiles').select('*').eq('id', userId).maybeSingle();
+      const { data } = await db.from('profiles').select('*').eq('id', userId).maybeSingle();
       return data ?? null;
     },
   });
@@ -45,8 +45,8 @@ export interface AnakDenganStatus extends Bayi {
 
 async function fetchAnakSemua(): Promise<AnakDenganStatus[]> {
   const [bayiRes, logRes] = await Promise.all([
-    supabase.from('bayi').select('*'),
-    supabase.from('antropometri_logs').select('*'),
+    db.from('bayi').select('*'),
+    db.from('antropometri_logs').select('*'),
   ]);
   const bayi: Bayi[] = bayiRes.data ?? [];
   const logs: AntropometriLog[] = logRes.data ?? [];
@@ -90,7 +90,7 @@ export function useLogsAnak(anakId?: string) {
     queryKey: qk.logs(anakId),
     enabled: !!anakId,
     queryFn: async (): Promise<AntropometriLog[]> => {
-      const { data } = await supabase.from('antropometri_logs').select('*').eq('anak_id', anakId).order('tanggal', { ascending: true });
+      const { data } = await db.from('antropometri_logs').select('*').eq('anak_id', anakId).order('tanggal', { ascending: true });
       return data ?? [];
     },
   });
@@ -101,7 +101,7 @@ export function useIbuHamil() {
   return useQuery({
     queryKey: qk.ibu,
     queryFn: async (): Promise<IbuHamil[]> => {
-      const { data } = await supabase.from('ibu_hamil').select('*').order('tgl_periksa', { ascending: false });
+      const { data } = await db.from('ibu_hamil').select('*').order('tgl_periksa', { ascending: false });
       return data ?? [];
     },
   });
@@ -113,7 +113,7 @@ export function useImunisasi(anakId?: string) {
     queryKey: qk.imunisasi(anakId),
     enabled: !!anakId,
     queryFn: async (): Promise<Imunisasi[]> => {
-      const { data } = await supabase.from('imunisasi').select('*').eq('anak_id', anakId);
+      const { data } = await db.from('imunisasi').select('*').eq('anak_id', anakId);
       return data ?? [];
     },
   });
@@ -141,8 +141,8 @@ export function useStatistik(scope?: { kader_id?: string; kelurahan?: string; ke
     queryFn: async (): Promise<Statistik> => {
       const [anak, logs, ibu] = await Promise.all([
         fetchAnakSemua(),
-        supabase.from('antropometri_logs').select('*') as Promise<{ data: AntropometriLog[] | null; error: null }>,
-        supabase.from('ibu_hamil').select('*') as Promise<{ data: IbuHamil[] | null; error: null }>,
+        db.from('antropometri_logs').select('*') as unknown as Promise<{ data: AntropometriLog[] | null; error: null }>,
+        db.from('ibu_hamil').select('*') as unknown as Promise<{ data: IbuHamil[] | null; error: null }>,
       ]);
 
       let list = anak;
@@ -225,7 +225,7 @@ export function useAddLog() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: async (log: Partial<AntropometriLog>) => {
-      const { data, error } = await supabase.from('antropometri_logs').insert(log).select();
+      const { data, error } = await db.from('antropometri_logs').insert(log).select();
       if (error) throw new Error(errMsg(error));
       return data?.[0] as AntropometriLog;
     },
@@ -242,7 +242,7 @@ export function useAddBayi() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: async (bayi: Partial<Bayi>) => {
-      const { data, error } = await supabase.from('bayi').insert(bayi).select();
+      const { data, error } = await db.from('bayi').insert(bayi).select();
       if (error) throw new Error(errMsg(error));
       return data?.[0] as Bayi;
     },
@@ -257,7 +257,7 @@ export function useAddIbu() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: async (ibu: Partial<IbuHamil>) => {
-      const { data, error } = await supabase.from('ibu_hamil').insert(ibu).select();
+      const { data, error } = await db.from('ibu_hamil').insert(ibu).select();
       if (error) throw new Error(errMsg(error));
       return data?.[0] as IbuHamil;
     },
@@ -272,7 +272,7 @@ export function useValidasiLog() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: async ({ id, bidanId }: { id: string; bidanId: string }) => {
-      const { error } = await supabase
+      const { error } = await db
         .from('antropometri_logs')
         .update({ validated_by: bidanId, validated_at: new Date().toISOString() })
         .eq('id', id);
@@ -290,7 +290,7 @@ export function useHapusLog() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: async (id: string) => {
-      const { error } = await supabase.from('antropometri_logs').delete().eq('id', id);
+      const { error } = await db.from('antropometri_logs').delete().eq('id', id);
       if (error) throw new Error(errMsg(error));
     },
     onSuccess: () => {
@@ -305,7 +305,7 @@ export function useSetImunisasi() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: async ({ anakId, vaksin, status, oleh }: { anakId: string; vaksin: string; status: 'completed' | 'pending'; oleh: string }) => {
-      const { data: existing } = await supabase.from('imunisasi').select('*').eq('anak_id', anakId).eq('vaksin', vaksin).maybeSingle();
+      const { data: existing } = await db.from('imunisasi').select('*').eq('anak_id', anakId).eq('vaksin', vaksin).maybeSingle();
       const row = {
         id: existing?.id,
         anak_id: anakId,
@@ -314,7 +314,7 @@ export function useSetImunisasi() {
         tanggal: status === 'completed' ? new Date().toISOString().slice(0, 10) : null,
         diberikan_oleh: status === 'completed' ? oleh : undefined,
       };
-      const { error } = await supabase.from('imunisasi').upsert(row);
+      const { error } = await db.from('imunisasi').upsert(row);
       if (error) throw new Error(errMsg(error));
     },
     onSuccess: (_d, vars) => {

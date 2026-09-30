@@ -1,8 +1,8 @@
 // ============================================================
-// Manajemen sesi reaktif (Supabase Auth → React state)
+// Manajemen sesi reaktif (Server API → React state)
 // ============================================================
 import { useSyncExternalStore } from 'react';
-import { supabase } from './supabase';
+import { db } from './db';
 import type { SessionUser } from './types';
 
 export interface AuthState {
@@ -27,8 +27,8 @@ function getSnapshot(): AuthState {
   return state;
 }
 
-// Inisialisasi sesi awal
-supabase.auth.onAuthStateChange((_event: string, session: any) => {
+// Sinkronisasi dari perubahan auth (login/logout / API)
+db.auth.onAuthStateChange((_event: string, session: any) => {
   setState({
     user: session?.user ? { id: session.user.id, email: session.user.email } : null,
     loading: false,
@@ -36,11 +36,15 @@ supabase.auth.onAuthStateChange((_event: string, session: any) => {
 });
 
 export async function initAuth() {
-  const { data } = await supabase.auth.getSession();
-  setState({
-    user: data.session?.user ? { id: data.session.user.id, email: data.session.user.email } : null,
-    loading: false,
-  });
+  try {
+    const { data } = await db.auth.getSession();
+    setState({
+      user: data.session?.user ? { id: data.session.user.id, email: data.session.user.email } : null,
+      loading: false,
+    });
+  } catch {
+    setState({ user: null, loading: false });
+  }
 }
 
 export function useAuth(): AuthState {
@@ -48,9 +52,9 @@ export function useAuth(): AuthState {
 }
 
 export async function login(email: string, password: string) {
-  return supabase.auth.signInWithPassword({ email, password });
+  return db.auth.signInWithPassword({ email, password });
 }
 
 export async function logout() {
-  await supabase.auth.signOut();
+  await db.auth.signOut();
 }

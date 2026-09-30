@@ -6,7 +6,7 @@
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.9-3178c6?logo=typescript&logoColor=white)](https://www.typescriptlang.org)
 [![Vite](https://img.shields.io/badge/Vite-7-646cff?logo=vite&logoColor=white)](https://vite.dev)
 [![Tailwind CSS](https://img.shields.io/badge/Tailwind_CSS-4-06b6d4?logo=tailwindcss&logoColor=white)](https://tailwindcss.com)
-[![Supabase](https://img.shields.io/badge/Supabase-Auth%20%2B%20DB%20%2B%20Realtime-3ecf8e?logo=supabase&logoColor=white)](https://supabase.com)
+[![Neon](https://img.shields.io/badge/Neon-PostgreSQL-00E599?logo=neon&logoColor=white)](https://neon.tech)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
 ---
@@ -30,12 +30,29 @@
 
 - **Frontend**: React 19 + TypeScript + Vite 7
 - **Styling**: Tailwind CSS 4 (CSS-first config)
-- **State & Data**: TanStack Query (React Query) + Supabase Realtime
-- **Auth**: Supabase Auth (email/password + demo mode)
-- **Database**: Supabase PostgreSQL (demo mode: localStorage)
+- **State & Data**: TanStack Query (React Query)
+- **Backend**: Vercel Serverless Functions (Node.js) — folder `api/`
+- **Database**: Neon PostgreSQL (via `@neondatabase/serverless`)
+- **Auth**: bcrypt (password) + JWT dalam cookie HttpOnly (`jose`)
 - **Charts**: Recharts
 - **Export**: jsPDF + AutoTable, SheetJS (xlsx)
 - **Icons**: Lucide React
+
+### Arsitektur
+
+```
+Browser (React SPA)
+    │  fetch /api/* (cookie HttpOnly)
+    ▼
+Vercel Serverless Functions  ← DATABASE_URL, AUTH_SECRET (env server, TIDAK terekspos)
+    │
+    ▼
+Neon PostgreSQL
+```
+
+- Saat `npm run dev`: endpoint `/api/*` dilayani oleh Vite plugin (`src/lib/devServer.ts`)
+  dengan mock database in-memory — jadi develop tanpa perlu Neon.
+- Saat deploy: endpoint dilayani oleh `api/` yang koneksi ke Neon sungguhan.
 
 ---
 
