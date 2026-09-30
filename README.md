@@ -114,6 +114,28 @@ Output di folder `dist/`.
 - Chunk splitting & caching optimal
 - Asset fingerprinting
 
+### ⚠️ Troubleshooting: `404 DEPLOYMENT_NOT_FOUND`
+
+Error ini berarti **deployment gagal / belum ada deployment yang sukses**, BUKAN error dari aplikasi. Penyebab umum:
+
+1. **Build gagal di Vercel** → cek **Build Logs** di tab Deployments, atau jalankan `npm run build` lokal dulu untuk memastikan tidak ada error.
+2. **Environment Variable di `vercel.json` belum dibuat** → jangan pakai referensi `@nama-var` di `vercel.json` jika variabelnya belum ada di Settings → Environment Variables. Lebih aman: set env var langsung lewat **dashboard Vercel** saja.
+3. **Kunjungi URL project utama** (misal `nama-project.vercel.app`), bukan URL deployment spesifik (`nama-project-abc123.vercel.app`) yang gagal.
+
+### 🗄️ Tentang DATABASE_URL (Neon / PostgreSQL)
+
+Aplikasi ini adalah **client-side app murni (Vite SPA)** — tidak ada server runtime di Vercel.
+
+- Vite **hanya membaca** env var dengan prefix `VITE_` (seperti `VITE_SUPABASE_URL`).
+- `DATABASE_URL` **tidak terbaca** oleh aplikasi, karena (a) tidak ada kode server yang membacanya, dan (b) string koneksi database **tidak boleh** ditaruh di kode client (bisa dilihat semua orang — celah keamanan).
+- Aplikasi ini memakai **Supabase** untuk database. Supabase menyediakan REST + Auth yang aman untuk client-side.
+
+**Pilihan kelanjutan database:**
+- **Paling gampang**: pakai PostgreSQL bawaan Supabase (gratis, langsung jalan).
+- **Pakai Neon**: hubungkan Neon sebagai *external database* di project Supabase, atau tulis ulang data layer ke serverless functions (butuh pengembangan tambahan).
+
+> **Tanpa env Supabase pun aplikasi tetap jalan** — otomatis masuk **Mode Demo** (data tersimpan di localStorage browser).
+
 ---
 
 ## 📁 Struktur Project
