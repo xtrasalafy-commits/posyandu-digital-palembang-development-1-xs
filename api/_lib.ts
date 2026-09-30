@@ -7,8 +7,8 @@
 // ============================================================
 
 import { neon } from '@neondatabase/serverless';
-import { SignJWT, jwtVerify } from 'jose';
 import bcrypt from 'bcryptjs';
+import { createHmac, timingSafeEqual } from 'node:crypto';
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import type { FilterOp, Op, QueryResult } from '../src/lib/mockDb';
 
@@ -25,31 +25,58 @@ function sql() {
   return _sql;
 }
 
-// ---------- JWT ----------
-function getSecret(): Uint8Array {
+// ---------- JWT (HMAC-SHA256 via node:crypto — tanpa dependency eksternal) ----------
+function getSecret(): string {
   const s = process.env.AUTH_SECRET;
   if (!s) {
     // Fallback agar tidak crash total; session akan hilang saat cold start
     console.warn('[AUTH] AUTH_SECRET belum diset — generate ephemeral secret (session tidak persisten antar cold start).');
-    return new TextEncoder().encode('ephemeral-' + crypto.randomUUID());
+    return 'ephemeral-' + randomToken();
   }
-  return new TextEncoder().encode(s);
+  return s;
+}
+
+function randomToken(): string {
+  return createHmac('sha256', String(Date.now())).digest('base64url');
+}
+
+function b64url(input: string | Buffer): string {
+  return Buffer.from(input as string).toString('base64url');
+}
+
+function b64urlDecodeToStr(s: string): string {
+  return Buffer.from(s, 'base64url').toString('utf8');
+}
+
+function signature(data: string): string {
+  return createHmac('sha256', getSecret()).update(data).digest('base64url');
 }
 
 export async function signSession(user: SessionUser): Promise<string> {
-  return new SignJWT({ sub: user.id, email: user.email })
-    .setProtectedHeader({ alg: 'HS256' })
-    .setIssuedAt()
-    .setExpirationTime('7d')
-    .sign(getSecret());
+  const now = Math.floor(Date.now() / 1000);
+  const header = b64url(JSON.stringify({ alg: 'HS256', typ: 'JWT' }));
+  const payload = b64url(JSON.stringify({ sub: user.id, email: user.email, iat: now, exp: now + SEVEN_DAYS }));
+  const signingInput = `${header}.${payload}`;
+  return `${signingInput}.${signature(signingInput)}`;
 }
 
 export async function verifySession(token: string | undefined): Promise<SessionUser | null> {
   if (!token) return null;
+  const parts = token.split('.');
+  if (parts.length !== 3) return null;
+  const [header, payload, sig] = parts;
+
+  // Validasi signature (timing-safe compare)
+  const expected = signature(`${header}.${payload}`);
+  const a = Buffer.from(sig);
+  const b = Buffer.from(expected);
+  if (a.length !== b.length || !timingSafeEqual(a, b)) return null;
+
   try {
-    const { payload } = await jwtVerify(token, getSecret());
-    if (typeof payload.sub !== 'string' || typeof payload.email !== 'string') return null;
-    return { id: payload.sub, email: payload.email };
+    const claims = JSON.parse(b64urlDecodeToStr(payload));
+    if (typeof claims.sub !== 'string' || typeof claims.email !== 'string') return null;
+    if (typeof claims.exp === 'number' && claims.exp < Math.floor(Date.now() / 1000)) return null;
+    return { id: claims.sub, email: claims.email };
   } catch { return null; }
 }
 

@@ -16,26 +16,49 @@ const BASE = '/api';
 
 // ---------- Util fetch ----------
 async function post<T = any>(path: string, body: any): Promise<T> {
-  const res = await fetch(BASE + path, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(body),
-    credentials: 'include',
-  });
+  let res: Response;
+  try {
+    res = await fetch(BASE + path, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+      credentials: 'include',
+    });
+  } catch (e: any) {
+    // Network-level failure (CORS, server tidak respond, offline)
+    throw { message: `Tidak bisa terhubung ke server (${BASE}${path}). Cek koneksi atau konfigurasi deployment.` };
+  }
+
+  // Baca body mentah dulu — bisa JSON atau HTML (mis. 404 page)
+  const raw = await res.text();
   let json: any;
-  try { json = await res.json(); } catch { json = { error: { message: 'Kesalahan jaringan. Coba lagi.' } }; }
+  try {
+    json = JSON.parse(raw);
+  } catch {
+    // Response bukan JSON → kemungkinan endpoint belum ada (404 HTML page)
+    const hint = res.status === 404
+      ? `Endpoint /api tidak ditemukan (404). Pastikan folder "api/" ikut ter-deploy dan env DATABASE_URL + AUTH_SECRET sudah diset di Vercel.`
+      : `Server merespons HTTP ${res.status} dengan format non-JSON.`;
+    throw { message: hint };
+  }
   if (!res.ok && !json.error) json = { error: { message: `HTTP ${res.status}` } };
   return json as T;
 }
 
 async function get<T = any>(path: string): Promise<T> {
-  const res = await fetch(BASE + path, { credentials: 'include' });
+  let res: Response;
+  try {
+    res = await fetch(BASE + path, { credentials: 'include' });
+  } catch {
+    return { data: { session: null } } as any;
+  }
+  const raw = await res.text();
   let json: any;
-  try { json = await res.json(); } catch { json = { data: { session: null } }; }
+  try { json = JSON.parse(raw); } catch { json = { data: { session: null } }; }
   return json as T;
 }
 
-// ---------- Klien query (API identik dengan Supabase builder) ----------
+// ---------- Klien query (mirip builder Supabase, tapi via HTTP) ----------
 export class HttpTable implements PromiseLike<QueryResult> {
   private ops: Op[] = [];
   constructor(private table: string) {}
@@ -78,20 +101,29 @@ export async function resetDemoData() {
   try { await post('/dev/reset', {}); } catch { /* abaikan di production */ }
 }
 
-// ---------- Klien utama (drop-in pengganti supabase) ----------
+// ---------- Klien utama ----------
 export const isDemoMode = import.meta.env.DEV;
 
 export const db = {
   auth: {
     async signInWithPassword({ email, password }: { email: string; password: string }) {
-      const r = await post<{ data: { user: SessionUser | null; session: any }; error: any }>('/auth/login', { email, password });
-      if (r.data?.user) emitAuth('SIGNED_IN', { user: r.data.user });
-      return r;
+      try {
+        const r = await post<{ data: { user: SessionUser | null; session: any }; error: any }>('/auth/login', { email, password });
+        if (r.data?.user) emitAuth('SIGNED_IN', { user: r.data.user });
+        return r;
+      } catch (e: any) {
+        return { data: { user: null, session: null }, error: { message: e?.message ?? 'Gagal masuk. Coba lagi.' } };
+      }
     },
     async signOut() {
-      const r = await post('/auth/logout', {});
-      emitAuth('SIGNED_OUT', null);
-      return r;
+      try {
+        const r = await post('/auth/logout', {});
+        emitAuth('SIGNED_OUT', null);
+        return r;
+      } catch (e: any) {
+        emitAuth('SIGNED_OUT', null);
+        return { error: { message: e?.message } };
+      }
     },
     async getSession() {
       return get<{ data: { session: { user: SessionUser } | null }; error: null }>('/auth/session');

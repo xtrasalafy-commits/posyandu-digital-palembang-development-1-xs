@@ -1,6 +1,6 @@
 // ============================================================
 // HOOKS DATA — TanStack Query (React Query)
-// Semua query & mutasi ke Supabase terpusat di sini.
+// Semua query & mutasi ke server API terpusat di sini.
 // ============================================================
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { db, resetDemoData } from './db';

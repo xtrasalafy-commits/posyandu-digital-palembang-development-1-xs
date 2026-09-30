@@ -71,8 +71,8 @@ function ProfileNotFound() {
         <p className="mt-2 text-sm font-semibold text-teal-100">
           Akun Anda berhasil login, tapi belum punya data profil di database.
           Hubungi admin untuk mendaftarkan profil, atau jalankan script SQL
-          <code className="rounded bg-white/20 px-1.5 py-0.5 text-xs"> supabase/schema.sql </code>
-          di Supabase SQL Editor.
+          <code className="rounded bg-white/20 px-1.5 py-0.5 text-xs"> neon/schema.sql </code>
+          di Neon SQL Editor.
         </p>
       </div>
       <Button

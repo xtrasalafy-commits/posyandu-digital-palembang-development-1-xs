@@ -1,5 +1,5 @@
 // ============================================================
-// HALAMAN MASUK — Supabase Auth (dengan akun demo 1-klik)
+// HALAMAN MASUK — Server Auth (dengan akun demo 1-klik)
 // ============================================================
 import { useState } from 'react';
 import type { FormEvent } from 'react';
@@ -35,9 +35,9 @@ export default function Login() {
     setLoading(false);
     if (err) {
       const msg = String(err.message || 'Gagal masuk. Coba lagi.');
-      // Error khas Supabase Auth saat email/password tidak cocok ATAU user belum dibuat
+      // Error khas server saat email/password tidak cocok ATAU user belum dibuat
       if (/invalid login credentials/i.test(msg)) {
-        setError('Email atau kata sandi salah — ATAU akun ini belum dibuat di server Supabase. Buat user di Supabase Dashboard → Authentication → Users, atau jalankan supabase/schema.sql.');
+        setError('Email atau kata sandi salah — atau akun belum terdaftar di database. Jalankan neon/schema.sql untuk membuat akun demo.');
       } else {
         setError(msg);
       }

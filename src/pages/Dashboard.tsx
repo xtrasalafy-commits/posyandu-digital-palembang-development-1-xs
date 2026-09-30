@@ -304,7 +304,7 @@ export default function Dashboard() {
       </Card>
 
       <p className="pb-2 text-center text-[11px] font-semibold text-slate-400">
-        Data tersimpan aman di Supabase · Posyandu Digital Palembang
+        Data tersimpan aman di Neon PostgreSQL · Posyandu Digital Palembang
       </p>
     </div>
   );

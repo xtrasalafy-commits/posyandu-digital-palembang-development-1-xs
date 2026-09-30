@@ -61,9 +61,9 @@ Neon PostgreSQL
 ### Prasyarat
 - Node.js 20+
 - npm / pnpm / yarn
-- Akun [Supabase](https://supabase.com) (untuk production)
+- (Untuk production) Project [Neon](https://neon.tech) + akun Vercel
 
-### Instalasi
+### Instalasi & Development
 
 ```bash
 # Clone repository
@@ -73,26 +73,18 @@ cd posyandu-digital-palembang
 # Install dependencies
 npm install
 
-# Copy environment template
-cp .env.example .env.local
-
-# Isi .env.local dengan kredensial Supabase Anda
-# VITE_SUPABASE_URL=https://your-project.supabase.co
-# VITE_SUPABASE_ANON_KEY=your-anon-key
-
 # Jalankan development server
 npm run dev
 ```
 
-Buka `http://localhost:5173`
+Buka `http://localhost:5173` — **langsung jalan tanpa setup apapun**:
 
-### Demo Mode (Tanpa Supabase)
-Tanpa `VITE_SUPABASE_URL` & `VITE_SUPABASE_ANON_KEY`, aplikasi otomatis berjalan dalam **Demo Mode** dengan:
-- Data contoh 32 balita, 14 ibu hamil, riwayat antropometri & imunisasi realistis Kota Palembang
-- 4 akun demo 1-klik (Kader, Bidan, Admin, Kader 2)
-- Penyimpanan lokal via localStorage (persisten antar reload)
+- Vite plugin (`src/lib/devServer.ts`) melayani endpoint `/api/*` dengan
+  **mock database in-memory** lengkap dengan data contoh Kota Palembang
+- Login pakai 4 akun demo (lihat tabel di bawah)
+- Data reset otomalis setiap restart dev server; tekan **Reset data** di halaman login untuk re-seed
 
-**Akun Demo:**
+**Akun Demo** (sama persis di dev & production):
 | Peran | Email | Password |
 |-------|-------|----------|
 | Kader | `kader@posyandu.id` | `kader123` |
@@ -100,61 +92,47 @@ Tanpa `VITE_SUPABASE_URL` & `VITE_SUPABASE_ANON_KEY`, aplikasi otomatis berjalan
 | Bidan | `bidan@posyandu.id` | `bidan123` |
 | Admin | `admin@dinkes.id` | `admin123` |
 
-> ⚠️ **Penting:** Akun demo di atas HANYA berfungsi dalam **Mode Demo** (tanpa env Supabase).
-> Kalau aplikasi sudah terhubung ke Supabase (env `VITE_SUPABASE_URL` terpasang), akun-akun
-> ini harus dibuat secara manual di Supabase — lihat **🔧 Setup Supabase** di bawah.
-
 ---
 
-## 🔧 Setup Supabase (untuk data persisten di server)
+## 🗄️ Setup Neon (untuk production)
 
-Supabase menyediakan Auth + PostgreSQL yang aman untuk aplikasi client-side ini.
-Ikuti 3 langkah berikut agar akun demo bisa dipakai di produksi.
+Agar data tersimpan permanen & bisa diakses dari device mana pun.
 
-### Langkah 1 — Buat Project Supabase
-1. Daftar / login di [supabase.com](https://supabase.com) (gratis)
-2. **New Project** → isi nama, password DB, region (pilih `Singapore` untuk Indonesia)
-3. Tunggu provisioning selesai (±2 menit)
+### Langkah 1 — Buat Database Neon
+1. Daftar / login di [neon.tech](https://neon.tech) (gratis)
+2. **Create Project** → pilih region (mis. `AWS ap-southeast-1` untuk Indonesia)
+3. Salin **connection string** (format:
+   `postgresql://user:pass@ep-host-pooler.region.aws.neon.tech/dbname?sslmode=require`)
 
-### Langkah 2 — Buat 4 Akun Demo
-1. Buka **Dashboard → Authentication → Users**
-2. Klik **Add user → Create new user**
-3. Buat keempat akun ini (aktifkan "Auto Confirm User"):
+### Langkah 2 — Jalankan Schema
+1. Buka **Dashboard Neon → SQL Editor**
+2. Copy-paste seluruh isi file [`neon/schema.sql`](neon/schema.sql) → **Run**
 
-   | Email | Password |
-   |-------|----------|
-   | `kader@posyandu.id` | `kader123` |
-   | `kader2@posyandu.id` | `kader123` |
-   | `bidan@posyandu.id` | `bidan123` |
-   | `admin@dinkes.id` | `admin123` |
+Script ini otomatis membuat:
+- 6 tabel: `users`, `profiles`, `bayi`, `antropometri_logs`, `imunisasi`, `ibu_hamil`
+- 4 akun demo dengan password sudah di-hash bcrypt + profil masing-masing
+- Data contoh: 3 balita, log antropometri, imunisasi, 1 ibu hamil
+- Index untuk performa query
 
-### Langkah 3 — Jalankan SQL Schema
-1. Buka **Dashboard → SQL Editor → New query**
-2. Copy-paste seluruh isi file [`supabase/schema.sql`](supabase/schema.sql)
-3. Klik **Run** (butuh ±5 detik)
+### Langkah 3 — Set Environment Variables di Vercel
+Vercel → **Settings → Environment Variables**:
 
-Script ini akan otomatis:
-- Membuat 5 tabel: `profiles`, `bayi`, `antropometri_logs`, `imunisasi`, `ibu_hamil`
-- Mengaktifkan **Row Level Security** + policy (hanya user login yang bisa akses data)
-- Menghubungkan setiap akun demo (berdasarkan email) ke baris `profiles` dengan role masing-masing
-- Menambahkan beberapa data contoh (3 balita, log antropometri, imunisasi, 1 ibu hamil)
+| Key | Value | Scope |
+|-----|-------|-------|
+| `DATABASE_URL` | connection string Neon | Production & Preview |
+| `AUTH_SECRET` | string acak rahasia (mis. `openssl rand -hex 32`) | Production & Preview |
 
-Verifikasi dengan query cek di akhir file SQL:
+> ⚠️ **PENTING:** JANGAN beri prefix `VITE_` pada kedua variabel di atas.
+> Variabel tanpa prefix hanya bisa dibaca oleh Serverless Functions (aman),
+> tidak pernah diekspos ke browser. `AUTH_SECRET` dipakai menandatangani cookie session.
+
+### Langkah 4 — Deploy
+Push ke GitHub → Vercel auto-deploy. Setelah selesai, langsung login pakai akun demo.
+
+Verifikasi koneksi dengan query ini di Neon SQL Editor:
 ```sql
-SELECT email, role FROM auth.users u JOIN public.profiles p ON p.id = u.id;
+SELECT u.email, p.role FROM public.users u JOIN public.profiles p ON p.id = u.id;
 ```
-
-### Langkah 4 — Set Environment Variables
-Di **Vercel** (Settings → Environment Variables) atau file `.env.local`:
-
-| Key | Value |
-|-----|-------|
-| `VITE_SUPABASE_URL` | `https://xxxxx.supabase.co` (Project Settings → API → Project URL) |
-| `VITE_SUPABASE_ANON_KEY` | `eyJ...` (Project Settings → API → anon public) |
-
-> ⚠️ Jangan pakai `service_role` key — itu untuk server only.
-
-Setelah itu **Redeploy** di Vercel, lalu login pakai akun demo di atas.
 
 ---
 
@@ -177,84 +155,103 @@ Output di folder `dist/`.
 1. Push ke GitHub
 2. Import project di [Vercel Dashboard](https://vercel.com/dashboard)
 3. Framework preset: **Vite** (auto-detect)
-4. Set Environment Variables:
-   - `VITE_SUPABASE_URL`
-   - `VITE_SUPABASE_ANON_KEY`
+4. Set Environment Variables (lihat **🗄️ Setup Neon** Langkah 3):
+   - `DATABASE_URL`
+   - `AUTH_SECRET`
 5. Deploy
 
 `vercel.json` sudah dikonfigurasi untuk:
-- Hash router (SPA fallback ke `index.html`)
+- Hash router (SPA fallback ke `index.html`, kecuali route `/api/*`)
 - Chunk splitting & caching optimal
 - Asset fingerprinting
+
+Serverless Functions di folder `api/` (auto-detect Vercel):
+- `POST /api/auth/login` — login, set cookie JWT
+- `POST /api/auth/logout` — hapus cookie
+- `GET /api/auth/session` — cek session
+- `POST /api/query` — query generik ke Neon (butuh auth)
 
 ### ⚠️ Troubleshooting: `404 DEPLOYMENT_NOT_FOUND`
 
 Error ini berarti **deployment gagal / belum ada deployment yang sukses**, BUKAN error dari aplikasi. Penyebab umum:
 
-1. **Build gagal di Vercel** → cek **Build Logs** di tab Deployments, atau jalankan `npm run build` lokal dulu untuk memastikan tidak ada error.
-2. **Environment Variable di `vercel.json` belum dibuat** → jangan pakai referensi `@nama-var` di `vercel.json` jika variabelnya belum ada di Settings → Environment Variables. Lebih aman: set env var langsung lewat **dashboard Vercel** saja.
-3. **Kunjungi URL project utama** (misal `nama-project.vercel.app`), bukan URL deployment spesifik (`nama-project-abc123.vercel.app`) yang gagal.
+1. **Build gagal di Vercel** → cek **Build Logs** di tab Deployments, atau jalankan `npm run build` lokal dulu.
+2. **Kunjungi URL project utama** (misal `nama-project.vercel.app`), bukan URL deployment spesifik yang gagal.
 
-### ⚠️ Troubleshooting: `Invalid login credentials` saat login demo
+### ⚠️ Troubleshooting: `Invalid login credentials` / login gagal
 
-Error ini datang langsung dari **Supabase Auth**. Artinya aplikasi **sudah** terhubung ke Supabase (env terbaca), tapi akun yang kamu coba belum terdaftar di server Supabase.
+Pesan ini muncul saat email/password tidak cocok di database. Checklist:
 
-**Solusi:** ikuti **🔧 Setup Supabase** di atas — khususnya:
-- **Langkah 2** (buat 4 user di Authentication → Users), dan
-- **Langkah 3** (jalankan `supabase/schema.sql` di SQL Editor) supaya setiap user punya baris `profiles` + role.
+1. **`neon/schema.sql` sudah dijalankan?** — Neon Dashboard → SQL Editor → Run
+   (membuat tabel + 4 akun demo). Cek:
+   ```sql
+   SELECT email FROM public.users;
+   ```
+2. **`DATABASE_URL` sudah benar & bisa dipakai server?** — Vercel → Settings →
+   Environment Variables. Harus berupa connection string Neon lengkap.
+3. **`AUTH_SECRET` sudah diset?** — tanpa ini, session hilang saat server cold-start.
+4. **Sudah redeploy** setelah set env var? Env var baru berlaku setelah deploy baru.
 
-Kalau setelah login berhasil layar hanya menampilkan **"Memuat data..."** tanpa henti → user tersebut belum punya baris di tabel `profiles`. Jalankan ulang Langkah 3 (scriptnya aman di-run berulang).
+> 💡 **Mode Demo untuk development:** `npm run dev` tidak butuh DATABASE_URL —
+> mock database otomatis aktif. DATABASE_URL hanya dibutuhkan di production (Vercel).
 
-### ⚠️ Alternatif: jalankan tanpa Supabase (Mode Demo murni)
+### ⚠️ Troubleshooting: layar mentok di "Memuat data..."
 
-Kalau cuma mau mencoba aplikasi tanpa setup database apa pun:
-- **Hapus / kosongkan** env `VITE_SUPABASE_URL` & `VITE_SUPABASE_ANON_KEY` di Vercel
-- Redeploy → aplikasi otomatis masuk **Mode Demo** (data di localStorage, 4 akun demo 1-klik langsung jalan)
+User login berhasil tapi profil belum ada di tabel `profiles`. Solusi:
+jalankan ulang `neon/schema.sql` (aman di-run berulang — pakai `ON CONFLICT`).
 
-### 🗄️ Tentang DATABASE_URL (Neon / PostgreSQL)
+### 🗄️ Tentang DATABASE_URL & keamanan
 
-Aplikasi ini adalah **client-side app murni (Vite SPA)** — tidak ada server runtime di Vercel.
+- `DATABASE_URL` (Neon) **hanya dibaca oleh Serverless Functions** (`api/`) di server,
+  **tidak pernah** diekspos ke browser (tanpa prefix `VITE_`).
+- String koneksi database di kode client = celah keamanan (bisa dilihat semua orang);
+  itulah sebabnya semua akses data lewat `/api/*` dengan cookie JWT HttpOnly.
+- Login memakai bcrypt + JWT — password tidak pernah disimpan plain-text.
 
-- Vite **hanya membaca** env var dengan prefix `VITE_` (seperti `VITE_SUPABASE_URL`).
-- `DATABASE_URL` **tidak terbaca** oleh aplikasi, karena (a) tidak ada kode server yang membacanya, dan (b) string koneksi database **tidak boleh** ditaruh di kode client (bisa dilihat semua orang — celah keamanan).
-- Aplikasi ini memakai **Supabase** untuk database. Supabase menyediakan REST + Auth yang aman untuk client-side.
-
-**Pilihan kelanjutan database:**
-- **Paling gampang**: pakai PostgreSQL bawaan Supabase (gratis, langsung jalan).
-- **Pakai Neon**: hubungkan Neon sebagai *external database* di project Supabase, atau tulis ulang data layer ke serverless functions (butuh pengembangan tambahan).
-
-> **Tanpa env Supabase pun aplikasi tetap jalan** — otomatis masuk **Mode Demo** (data tersimpan di localStorage browser).
+> Saat `npm run dev`, aplikasi otomatis pakai **mock database in-memory**
+> (`src/lib/devServer.ts`) — tidak butuh DATABASE_URL. DATABASE_URL hanya perlu di Vercel.
 
 ---
 
 ## 📁 Struktur Project
 
 ```
-src/
-├── components/
-│   ├── ui.tsx              # Design system (Button, Card, Badge, Dialog, Toast, dll)
-│   ├── Layout.tsx          # Sidebar desktop + Bottom nav mobile + Sheet menu
-│   └── TrakteerWidget.tsx  # Floating support widget (QR inline)
-├── lib/
-│   ├── api.ts              # TanStack Query hooks (query + mutation)
-│   ├── auth.ts             # Reactive auth state (useSyncExternalStore)
-│   ├── supabase.ts         # Supabase client + Demo mode (localStorage DB)
-│   ├── antropometri.ts     # WHO z-score engine (BB/U, TB/U, BB/TB, LK/U)
-│   ├── types.ts            # TypeScript interfaces
-│   └── utils.ts            # Helpers (format, nav, constants)
-├── pages/
-│   ├── Login.tsx
-│   ├── Dashboard.tsx
-│   ├── Bayi.tsx
-│   ├── DetailBayi.tsx
-│   ├── Antropometri.tsx
-│   ├── IbuHamil.tsx
-│   ├── Imunisasi.tsx
-│   ├── Peta.tsx
-│   └── Laporan.tsx
-├── App.tsx                 # Router hash + role guard + providers
-├── main.tsx                # Entry point
-└── index.css               # Tailwind + custom theme + animations
+├── api/                          # Vercel Serverless Functions
+│   ├── _lib.ts                   # Koneksi Neon + JWT + SQL builder
+│   ├── query.ts                  # POST /api/query (semua operasi DB)
+│   └── auth/
+│       ├── login.ts              # POST /api/auth/login
+│       ├── logout.ts             # POST /api/auth/logout
+│       └── session.ts            # GET /api/auth/session
+├── neon/
+│   └── schema.sql                # Schema DB + seed akun demo & data contoh
+├── src/
+│   ├── components/
+│   │   ├── ui.tsx                # Design system (Button, Card, Badge, Dialog, Toast, dll)
+│   │   ├── Layout.tsx            # Sidebar desktop + Bottom nav mobile + Sheet menu
+│   │   └── TrakteerWidget.tsx    # Floating support widget (QR inline)
+│   ├── lib/
+│   │   ├── api.ts                # TanStack Query hooks (query + mutation)
+│   │   ├── auth.ts               # Reactive auth state (useSyncExternalStore)
+│   │   ├── db.ts                 # Client HTTP → /api/*
+│   │   ├── devServer.ts          # Vite plugin: mock /api/* saat npm run dev
+│   │   ├── mockDb.ts             # In-memory DB + seed data contoh
+│   │   ├── antropometri.ts       # WHO z-score engine (BB/U, TB/U, BB/TB, LK/U)
+│   │   ├── types.ts              # TypeScript interfaces
+│   │   └── utils.ts              # Helpers (format, nav, constants)
+│   ├── pages/
+│   │   ├── Login.tsx
+│   │   ├── Dashboard.tsx
+│   │   ├── Bayi.tsx
+│   │   ├── DetailBayi.tsx
+│   │   ├── Antropometri.tsx
+│   │   ├── IbuHamil.tsx
+│   │   ├── Imunisasi.tsx
+│   │   ├── Peta.tsx
+│   │   └── Laporan.tsx
+│   ├── App.tsx                   # Router hash + role guard + providers
+│   ├── main.tsx                  # Entry point
+│   └── index.css                 # Tailwind + custom theme + animations
 ```
 
 ---
