@@ -1,5 +1,5 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
-import { readCookie, verifySession } from '../_lib';
+import { describeError, isConfigError, readCookie, verifySession } from '../_lib';
 
 // GET /api/auth/session → { data: { session: { user } | null } }
 export default async function handler(req: VercelRequest, res: VercelResponse) {
@@ -12,6 +12,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return res.status(200).json({ data: { session: user ? { user } : null }, error: null });
   } catch (e) {
     console.error('[session]', e);
+    // Mis-konfigurasi server harus kelihatan jelas, bukan disamarkan jadi "belum login".
+    if (isConfigError(e)) {
+      return res.status(500).json({
+        data: { session: null },
+        error: { message: describeError(e, 'Kesalahan server.') },
+      });
+    }
     return res.status(200).json({ data: { session: null }, error: null });
   }
 }

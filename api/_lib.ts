@@ -6,42 +6,87 @@
 // - DATABASE_URL & AUTH_SECRET HANYA ada di server (env var Vercel)
 // ============================================================
 
-import { neon } from '@neondatabase/serverless';
-import bcrypt from 'bcryptjs';
 import { createHmac, timingSafeEqual } from 'node:crypto';
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import type { FilterOp, Op, QueryResult } from '../src/lib/mockDb';
+
+// ------------------------------------------------------------
+// Dependency runtime dimuat LAZY lewat dynamic import.
+// Tujuannya: module load api/_lib.ts tidak pernah crash saat cold
+// start Vercel. Kalau ada dependency yang gagal dimuat, error-nya
+// muncul sebagai JSON 500 yang bisa dibaca, bukan halaman HTML error
+// default Vercel.
+// ------------------------------------------------------------
+
+type NeonFn = {
+  (strings: TemplateStringsArray, ...values: any[]): Promise<any>;
+  query(text: string, values?: any[]): Promise<any>;
+};
+
+type NeonFactory = (connectionString: string) => NeonFn;
+
+let _neon: Promise<NeonFactory> | null = null;
+function loadNeon(): Promise<NeonFactory> {
+  if (!_neon) {
+    _neon = import('@neondatabase/serverless')
+      .then((m: any) => (m?.neon ?? m?.default?.neon) as NeonFactory)
+      .catch((e) => {
+        _neon = null;
+        throw new Error('Gagal memuat driver Neon: ' + (e?.message ?? e));
+      });
+  }
+  return _neon;
+}
+
+type Bcrypt = { compare: (plain: string, hash: string) => Promise<boolean> };
+
+let _bcrypt: Promise<Bcrypt> | null = null;
+function loadBcrypt(): Promise<Bcrypt> {
+  if (!_bcrypt) {
+    _bcrypt = import('bcryptjs')
+      .then((m: any) => (m?.default?.compare ? m.default : m) as Bcrypt)
+      .catch((e) => {
+        _bcrypt = null;
+        throw new Error('Gagal memuat bcryptjs: ' + (e?.message ?? e));
+      });
+  }
+  return _bcrypt;
+}
 
 export interface SessionUser { id: string; email: string }
 
 const COOKIE_NAME = 'pdp_session';
 const SEVEN_DAYS = 60 * 60 * 24 * 7;
 
-let _sql: ReturnType<typeof neon> | null = null;
-function sql() {
+let _sql: Promise<NeonFn> | null = null;
+async function sql(): Promise<NeonFn> {
   const url = process.env.DATABASE_URL;
   if (!url) throw new Error('DATABASE_URL belum diset di environment variables Vercel.');
-  if (!_sql) _sql = neon(url);
+  if (!_sql) {
+    _sql = loadNeon()
+      .then((factory) => factory(url))
+      .catch((e) => {
+        _sql = null;
+        throw e;
+      });
+  }
   return _sql;
 }
 
 // ---------- JWT (HMAC-SHA256 via node:crypto — tanpa dependency eksternal) ----------
+
+// AUTH_SECRET WAJIB diset. Tanpa itu, signature tiap instance berbeda sehingga
+// user logout sendiri secara random. Lebih baik error eksplisit daripada diam-diam rusak.
 function getSecret(): string {
   const s = process.env.AUTH_SECRET;
   if (!s) {
-    // Fallback agar tidak crash total; session akan hilang saat cold start
-    console.warn('[AUTH] AUTH_SECRET belum diset — generate ephemeral secret (session tidak persisten antar cold start).');
-    return 'ephemeral-' + randomToken();
+    throw new Error('AUTH_SECRET belum diset di environment variables Vercel.');
   }
   return s;
 }
 
-function randomToken(): string {
-  return createHmac('sha256', String(Date.now())).digest('base64url');
-}
-
 function b64url(input: string | Buffer): string {
-  return Buffer.from(input as string).toString('base64url');
+  return Buffer.from(input as Buffer).toString('base64url');
 }
 
 function b64urlDecodeToStr(s: string): string {
@@ -103,6 +148,27 @@ export function readCookie(req: VercelRequest): string | undefined {
 // ---------- Helper response ----------
 export function sendJson(res: VercelResponse, status: number, body: any) {
   res.status(status).json(body);
+}
+
+// ---------- Pesan error yang bisa dibaca user (bukan "Kesalahan server" generik) ----------
+const CONFIG_ERRORS: Array<[RegExp, string]> = [
+  [/DATABASE_URL belum diset/, 'Server belum dikonfigurasi: env var DATABASE_URL belum diset di Vercel.'],
+  [/AUTH_SECRET belum diset/, 'Server belum dikonfigurasi: env var AUTH_SECRET belum diset di Vercel.'],
+  [/Gagal memuat driver Neon/, 'Server gagal memuat driver Neon. Periksa log deployment Vercel.'],
+  [/Gagal memuat bcryptjs/, 'Server gagal memuat bcryptjs. Periksa log deployment Vercel.'],
+];
+
+/** True bila error ini akibat konfigurasi server, bukan input user. */
+export function isConfigError(e: any): boolean {
+  const m = String(e?.message ?? '');
+  return CONFIG_ERRORS.some(([re]) => re.test(m));
+}
+
+/** Pesan aman untuk dikirim ke client. */
+export function describeError(e: any, fallback: string): string {
+  const m = String(e?.message ?? '');
+  const hit = CONFIG_ERRORS.find(([re]) => re.test(m));
+  return hit ? hit[1] : fallback;
 }
 
 // ---------- SQL builder: Op[] → SQL parameterized ----------
@@ -253,8 +319,9 @@ function normalizeRows(table: string, rows: any[]): any[] {
 export async function runQuery(table: string, ops: Op[]): Promise<QueryResult> {
   const { text, values } = buildSql(table, ops);
   // neon() hanya bisa dipanggil sebagai tagged-template; untuk query dinamis
-  // dengan placeholder $1..$n, gunakan sql.query().
-  const rows = await sql().query(text, values) as unknown as any[];
+  // dengan placeholder $1..$n, gunakan client.query().
+  const client = await sql();
+  const rows = await client.query(text, values) as unknown as any[];
   const singleMode = ops.some((o) => o.t === 'single' || o.t === 'maybeSingle');
   const data = singleMode ? (rows[0] ?? null) : rows;
   const norm = data instanceof Array
@@ -265,9 +332,11 @@ export async function runQuery(table: string, ops: Op[]): Promise<QueryResult> {
 
 // ---------- Auth: login by email/password ----------
 export async function authenticate(email: string, password: string): Promise<SessionUser | null> {
-  const rows = await sql()`SELECT id, email, password_hash FROM public.users WHERE email = ${email.toLowerCase()} LIMIT 1` as unknown as any[];
+  const client = await sql();
+  const rows = await client`SELECT id, email, password_hash FROM public.users WHERE email = ${email.toLowerCase()} LIMIT 1` as unknown as any[];
   const user = rows[0];
   if (!user) return null;
+  const bcrypt = await loadBcrypt();
   const ok = await bcrypt.compare(password, user.password_hash as string);
   return ok ? { id: user.id as string, email: user.email as string } : null;
 }

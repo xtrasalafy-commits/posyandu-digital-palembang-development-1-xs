@@ -1,5 +1,5 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
-import { readCookie, runQuery, verifySession } from './_lib';
+import { describeError, readCookie, runQuery, verifySession } from './_lib';
 import type { Op } from '../src/lib/mockDb';
 
 // POST /api/query  { table, ops[] }
@@ -25,9 +25,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return res.status(200).json(result);
   } catch (e: any) {
     console.error('[query]', e);
-    const msg = /DATABASE_URL belum diset/.test(e?.message ?? '')
-      ? 'Server belum dikonfigurasi: DATABASE_URL belum diset.'
-      : 'Kesalahan server saat mengakses data.';
-    return res.status(500).json({ data: null, error: { message: msg } });
+    return res.status(500).json({
+      data: null,
+      error: { message: describeError(e, 'Kesalahan server saat mengakses data.') },
+    });
   }
 }

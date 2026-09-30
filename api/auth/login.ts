@@ -1,5 +1,5 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
-import { authenticate, setSessionCookie, signSession } from '../_lib';
+import { authenticate, describeError, setSessionCookie, signSession } from '../_lib';
 
 // POST /api/auth/login  { email, password }
 export default async function handler(req: VercelRequest, res: VercelResponse) {
@@ -32,9 +32,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return res.status(200).json({ data: { user, session: { user } }, error: null });
   } catch (e: any) {
     console.error('[login]', e);
-    const msg = /DATABASE_URL belum diset/.test(e?.message ?? '')
-      ? 'Server belum dikonfigurasi: DATABASE_URL belum diset.'
-      : 'Kesalahan server. Coba lagi.';
-    return res.status(500).json({ data: { user: null, session: null }, error: { message: msg } });
+    return res.status(500).json({
+      data: { user: null, session: null },
+      error: { message: describeError(e, 'Kesalahan server. Coba lagi.') },
+    });
   }
 }
